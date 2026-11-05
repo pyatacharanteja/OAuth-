@@ -1,0 +1,68 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>OAuth Path</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+:root{--bg:#faf9f6;--fg:#1c1b19;--mu:#6b6860;--card:#fff;--bd:#e4e1da;--ac:#2f5bd3;--ok:#1d7a46;--wa:#a86500;--er:#b3321f}
+@media(prefers-color-scheme:dark){:root{--bg:#161615;--fg:#ecebe6;--mu:#a09d94;--card:#1f1f1d;--bd:#34332f;--ac:#7c9cf5;--ok:#5cc58a;--wa:#e0a04a;--er:#f08a78}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:860px;margin:0 auto;padding:24px 18px 60px}h1{font-size:26px;margin:0 0 4px}h2{font-size:18px;margin:26px 0 8px}
+.s,.note{color:var(--mu)}.note{font-size:13px}.row{display:flex;gap:8px;flex-wrap:wrap}
+input{flex:1;min-width:200px;padding:10px 12px;border:1px solid var(--bd);border-radius:8px;background:var(--card);color:var(--fg);font:inherit}
+button{padding:10px 14px;border:1px solid var(--bd);border-radius:8px;background:var(--card);color:var(--fg);font:inherit;cursor:pointer}button.p{background:var(--ac);color:#fff;border-color:var(--ac)}button:disabled{opacity:.5;cursor:default}
+.lib{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px;margin:12px 0}.lib button{text-align:left}.lib b{display:block}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:16px;margin:12px 0}.k{color:var(--mu);font-size:12px;text-transform:uppercase;letter-spacing:.04em}
+.pills{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}.pill{border:1px solid var(--bd);border-radius:99px;padding:3px 10px;font-size:13px}
+.g{display:grid;grid-template-columns:1fr 1fr;gap:12px}@media(max-width:600px){.g{grid-template-columns:1fr}}
+ol,ul{padding-left:20px;margin:6px 0}li{margin:6px 0}.tag{font-size:12px;border-radius:4px;padding:1px 6px;border:1px solid currentColor;white-space:nowrap}
+.documented,.reviewed{color:var(--ok)}.unverified{color:var(--wa)}.unknown{color:var(--er)}a{color:var(--ac)}
+details{margin-top:4px}summary{cursor:pointer;color:var(--mu);font-size:13px}blockquote{margin:6px 0;padding-left:10px;border-left:3px solid var(--bd);color:var(--mu);font-size:13px}
+#st.err{color:var(--er)}
+@media print{.noprint{display:none}}
+</style></head><body><main>
+<h1>OAuth Path</h1>
+<p class="s">Look up an app and see what it takes to ship your own OAuth app: difficulty, effort, approval wait, blockers, what an agent can do and where you take over.</p>
+<div class="row noprint"><input id="q" placeholder="App name or website, e.g. Notion or zoom.us" maxlength="200"><button class="p" id="go">Generate guide</button></div>
+<div id="st" class="note" style="margin-top:8px" role="status"></div>
+<h2>Library</h2><div class="lib" id="lib"></div><div id="out"></div>
+<div class="card note"><b style="color:var(--fg)">Evidence labels.</b>
+<span class="tag documented">documented</span> the server found the quoted text on a page it fetched.
+<span class="tag reviewed">reviewed</span> a curator read the linked source; not machine-checked.
+<span class="tag unverified">unverified</span> plausible but unsupported.
+<span class="tag unknown">unknown</span> not found. No provider setup has been attempted end to end; timings are only as good as the cited pages.</div>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+let cur=null,busy=false;
+const api=async u=>{const r=await fetch(u);if(!r.ok)throw new Error((await r.json().catch(()=>({}))).error||"Request failed");return r.json()};
+async function loadLib(){try{const gs=await api("/api/guides");$("lib").innerHTML=gs.map(g=>`<button data-id="${esc(g.id)}"><b>${esc(g.name)}</b><span class="note">${esc(g.difficulty)} · ${g.origin==="generated"?"generated":"curated"}</span></button>`).join("")}catch(e){$("lib").textContent="Could not load the library."}}
+$("lib").onclick=e=>{const b=e.target.closest("button");if(b)open(b.dataset.id)};
+async function open(id,push=true){try{const g=await api("/api/guides/"+encodeURIComponent(id));render(g);if(push)history.pushState({},"","/g/"+g.id);$("st").textContent="";$("st").className="note"}catch(e){setErr(e.message)}}
+function setErr(m){$("st").textContent=m;$("st").className="err"}
+const tag=e=>`<span class="tag ${esc(e)}">${esc(e)}</span>`;
+function cl(g,c){let q="";const s=c.source!=null&&g.sources[c.source];if(c.quote&&s)q=`<details><summary>Evidence</summary><blockquote>“${esc(c.quote)}”<br><a href="${esc(s.url)}" target="_blank" rel="noopener noreferrer">${esc(s.title)}</a></blockquote></details>`;return `<li>${esc(c.text)} ${tag(c.evidence)}${q}</li>`}
+function render(g){cur=g;const ul=a=>(a||[]).map(t=>`<li>${esc(t)}</li>`).join("");
+$("out").innerHTML=`<div class="card"><div class="k">${g.origin==="generated"?"Generated from fetched documentation"+(g.generatedAt?" · "+new Date(g.generatedAt).toLocaleDateString():""):"Curated guide"}</div><h2 style="margin:4px 0">${esc(g.name)}</h2><p style="margin:0">${esc(g.summary)}</p>
+<div class="pills"><span class="pill"><b>Difficulty:</b> ${esc(g.difficulty)}</span><span class="pill"><b>Effort:</b> ${esc(g.effort||"Not published")}</span></div><p><b>Approval:</b> ${esc(g.approval||"Not published")}</p></div>
+<div class="card"><div class="k">Path</div><ol>${g.steps.map(c=>cl(g,c)).join("")}</ol></div>
+<div class="g"><div class="card"><div class="k">An agent can</div><ul>${ul(g.agentCan)}</ul></div><div class="card"><div class="k">You take over</div><ul>${ul(g.humanMust)}</ul></div></div>
+<div class="card"><div class="k">Blockers and nuances</div><ul>${g.blockers.map(c=>cl(g,c)).join("")}</ul></div>
+${g.gaps&&g.gaps.length?`<div class="card"><div class="k">Not answered by the sources</div><ul>${ul(g.gaps)}</ul></div>`:""}
+<div class="card"><div class="k">Sources</div><ul>${g.sources.map(s=>`<li><a href="${esc(s.url)}" target="_blank" rel="noopener noreferrer">${esc(s.title)}</a></li>`).join("")||"<li>None</li>"}</ul>
+<div class="row noprint" style="margin-top:10px"><button id="cl">Copy link</button><button id="cm">Copy Markdown</button><button id="pr">Print</button></div></div>`;
+$("cl").onclick=()=>copy(location.origin+"/g/"+g.id);$("cm").onclick=()=>copy(md(g));$("pr").onclick=()=>window.print();
+$("out").scrollIntoView({behavior:"smooth"})}
+async function copy(t){try{await navigator.clipboard.writeText(t);$("st").textContent="Copied.";$("st").className="note"}catch{setErr("Copy was blocked by the browser.")}}
+function md(g){const c=a=>a.map((x,i)=>`${i+1}. ${x.text} [${x.evidence}]`).join("\n"),b=a=>(a||[]).map(x=>"- "+x).join("\n");return`# ${g.name}: OAuth app setup\n\n${g.summary}\n\n- Difficulty: ${g.difficulty}\n- Effort: ${g.effort}\n- Approval: ${g.approval}\n\n## Path\n${c(g.steps)}\n\n## An agent can\n${b(g.agentCan)}\n\n## You take over\n${b(g.humanMust)}\n\n## Blockers\n${g.blockers.map(x=>`- ${x.text} [${x.evidence}]`).join("\n")}\n\n## Not answered by the sources\n${b(g.gaps)}\n\n## Sources\n${g.sources.map(s=>`- ${s.url}`).join("\n")}\n`}
+async function gen(){const q=$("q").value.trim();if(!q||busy)return;busy=true;$("go").disabled=true;$("st").className="note";$("st").textContent="Starting…";
+try{const r=await fetch("/api/generate",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({query:q})});
+if(!r.ok)throw new Error((await r.json().catch(()=>({}))).error||"Request failed");
+const rd=r.body.getReader(),dec=new TextDecoder();let buf="",done=false;
+const handle=l=>{if(!l.trim())return;const m=JSON.parse(l);if(m.type==="progress")$("st").textContent=m.message+"…";else if(m.type==="error")throw new Error(m.message);else if(m.type==="guide"){done=true;render(m.guide);history.pushState({},"","/g/"+m.guide.id);$("st").textContent="Done. Check the cited sources before relying on timings.";loadLib()}};
+for(;;){const{value,done:d}=await rd.read();if(d)break;buf+=dec.decode(value,{stream:true});const ls=buf.split("\n");buf=ls.pop();ls.forEach(handle)}
+handle(buf);if(!done)throw new Error("The connection ended before a guide was produced.")}
+catch(e){setErr(e.message||"Generation failed")}
+busy=false;$("go").disabled=false}
+$("go").onclick=gen;$("q").onkeydown=e=>{if(e.key==="Enter")gen()};
+window.onpopstate=()=>{const m=location.pathname.match(/^\/g\/([a-z0-9-]+)$/);m?open(m[1],false):($("out").innerHTML="")};
+loadLib();{const m=location.pathname.match(/^\/g\/([a-z0-9-]+)$/);if(m)open(m[1],false)}
+</script></body></html>
